@@ -161,7 +161,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
                     self.checkManuallyButton.leadingAnchor.constraint(equalTo: self.view.leadingAnchor, constant: 15),
                     self.checkManuallyButton.trailingAnchor.constraint(equalTo: self.view.trailingAnchor, constant: -15),
                     self.checkManuallyButton.heightAnchor.constraint(equalToConstant: 50),
-                    self.checkManuallyButton.topAnchor.constraint(equalTo: self.view.bottomAnchor, constant: -30),
+                    self.checkManuallyButton.bottomAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.bottomAnchor, constant: -15),
                 ])
             }
         }
@@ -450,7 +450,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
             goToSettingsButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 15),
             goToSettingsButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -15),
             goToSettingsButton.heightAnchor.constraint(equalToConstant: 50),
-            goToSettingsButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -30)
+            goToSettingsButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -15)
         ])
     }
 

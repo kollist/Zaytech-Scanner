@@ -14,12 +14,43 @@ class LoginViewController: UIViewController {
     var recaptchaClient: RecaptchaClient?
     let gradientLay = gradientLayer()
     var onLoginSuccess: ((_ profile: Profile, _ completion: @escaping () -> Void) -> Void)?
+    private var email: String?
+    private var password: String?
+    
+    // Images
+    let checkedImage = UIImage(systemName: "checkmark.square")
+    let uncheckedImage = UIImage(systemName: "square")
+    // Bool property
+    var isChecked: Bool = false {
+        didSet {
+            if isChecked == true {
+                self.rememberMeButton.setImage(checkedImage, for: UIControl.State.normal)
+            } else {
+                self.rememberMeButton.setImage(uncheckedImage, for: UIControl.State.normal)
+            }
+        }
+    }
+    
+    
+    init(email: String? = nil, password: String? = nil) {
+        self.email = email
+        self.password = password
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         self.view.backgroundColor = .systemBackground
         setupViews()
         runAnimation()
-        
+        self.isChecked = false
+
+        self.rememberMeButton.setImage(uncheckedImage, for: .normal)
+
         // Add keyboard observers
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillShow(_:)), name: UIResponder.keyboardWillShowNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillHide(_:)), name: UIResponder.keyboardWillHideNotification, object: nil)
@@ -79,6 +110,8 @@ class LoginViewController: UIViewController {
         self.emailTextField.alpha = 0
         self.emailLabel.transform = CGAffineTransform(translationX: -200, y: 0)
         self.emailLabel.alpha = 0
+        self.rememberMeButton.transform = CGAffineTransform(translationX: -200, y: 0)
+        self.rememberMeButton.alpha = 0
         
         self.addCurvedBottom(to: self.animatedView)
         UIView.animate(withDuration: 0.5, delay: 0, options: [.curveLinear], animations: {
@@ -144,6 +177,7 @@ class LoginViewController: UIViewController {
         self.passwordLabel.isHidden = false
         self.emailTextField.isHidden = false
         self.emailLabel.isHidden = false
+        self.rememberMeButton.isHidden = false
         UIView.animate(withDuration: 1, delay: 0.2, usingSpringWithDamping: 0.6, initialSpringVelocity: 0.5, options: [], animations: {
             self.loginButton.transform = .identity
             self.loginButton.alpha = 1
@@ -166,11 +200,14 @@ class LoginViewController: UIViewController {
             self.emailLabel.transform = .identity
             self.emailLabel.alpha = 1
             
+            self.rememberMeButton.transform = .identity
+            self.rememberMeButton.alpha = 1
+            
         })
     }
     
     func getCaptchaToken() async {
-        // Perform validation before adding the loader or fetching the token
+
         guard validateInputs() else {
             return
         }
@@ -271,7 +308,7 @@ class LoginViewController: UIViewController {
         
         if !isExecuting {
             isExecuting = true
-            LoginModal.shared.login(email: email, password: password, gtoken: gtoken, rememberMe: true) { [weak self] result in
+            LoginModal.shared.login(email: email, password: password, gtoken: gtoken, rememberMe: isChecked) { [weak self] result in
                 DispatchQueue.main.async {
                     guard let self = self else { return }
                     switch result {
@@ -296,6 +333,22 @@ class LoginViewController: UIViewController {
         showErrorAlert(error.safeErrorMessage)
     }
     
+    private let rememberMeButton: UIButton = {
+        let btn = UIButton()
+        btn.setTitleColor(.systemBlue, for: .normal)
+        btn.setTitle("  Remember me", for: .normal)
+        btn.titleLabel?.font = .systemFont(ofSize: 12, weight: .semibold)
+        btn.translatesAutoresizingMaskIntoConstraints = false
+        btn.addTarget(self, action:#selector(buttonClicked), for: .touchUpInside)
+        return btn
+    }()
+    
+    @objc func buttonClicked() {
+        self.isChecked = !isChecked
+    }
+    
+    
+    
     // Email Input Field
     private let emailTextField: UITextField = {
         let textField = UITextField()
@@ -316,22 +369,38 @@ class LoginViewController: UIViewController {
         return textField
     }()
     
-    private let passwordTextField: UITextField = {
+    // Password Input Field
+    private lazy var passwordTextField: UITextField = {
         let textField = UITextField()
         textField.placeholder = "Please enter your password"
         textField.isSecureTextEntry = true
-        textField.layer.cornerRadius =  10
+        textField.layer.cornerRadius = 10
         textField.backgroundColor = UIColor(named: "InputFieldBg")
         textField.layer.borderWidth = 0.75
         textField.layer.borderColor = UIColor(named: "InputFieldBorders")?.cgColor
         textField.translatesAutoresizingMaskIntoConstraints = false
         textField.font = .systemFont(ofSize: 15, weight: .medium)
         textField.returnKeyType = .done
-        
-        let paddingView = UIView(frame: CGRect(x: 0, y: 0, width: 20, height: 0)) // Adjust width as needed
+
+        // Left Padding
+        let paddingView = UIView(frame: CGRect(x: 0, y: 0, width: 20, height: 0))
         textField.leftView = paddingView
-        textField.leftViewMode = .always // Ensure padding is always visible
+        textField.leftViewMode = .always
+
+        // Right View (Eye Icon)
+        let eyeButton = UIButton(type: .system)
+        eyeButton.frame = CGRect(x: 0, y: 0, width: 25, height: 20)
+        eyeButton.setImage(UIImage(systemName: "eye.slash"), for: .normal)
+        eyeButton.tintColor = .systemGray
+        eyeButton.addTarget(self, action: #selector(togglePasswordVisibility), for: .touchUpInside)
+
+        let rightContainer = UIView(frame: CGRect(x: 0, y: 0, width: 35, height: 20))
+        eyeButton.center = rightContainer.center
+        rightContainer.addSubview(eyeButton)
         
+        textField.rightView = rightContainer
+        textField.rightViewMode = .always
+
         return textField
     }()
     
@@ -394,6 +463,8 @@ class LoginViewController: UIViewController {
     private func setupViews() {
         emailTextField.delegate = self
         passwordTextField.delegate = self
+        emailTextField.text = self.email
+        passwordTextField.text = self.password
         
         view.addSubview(titleLabel)
         view.addSubview(subtitleLabel)
@@ -404,14 +475,19 @@ class LoginViewController: UIViewController {
         view.addSubview(loginButton)
         view.addSubview(animatedView)
         view.addSubview(logoImageView)
+        view.addSubview(rememberMeButton)
         
         NSLayoutConstraint.activate([
             
+            rememberMeButton.topAnchor.constraint(equalTo: passwordTextField.bottomAnchor, constant: 5),
+            view.trailingAnchor.constraint(equalToSystemSpacingAfter: rememberMeButton.trailingAnchor, multiplier: 2),
+            rememberMeButton.heightAnchor.constraint(equalToConstant: 20),
+
             loginButton.leadingAnchor.constraint(equalToSystemSpacingAfter: view.leadingAnchor, multiplier: 2),
             view.trailingAnchor.constraint(equalToSystemSpacingAfter: loginButton.trailingAnchor, multiplier: 2),
             loginButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -15),
             loginButton.heightAnchor.constraint(equalToConstant: 50),
-            loginButton.topAnchor.constraint(greaterThanOrEqualTo: passwordTextField.bottomAnchor, constant: 30),
+            loginButton.topAnchor.constraint(greaterThanOrEqualTo: passwordTextField.bottomAnchor, constant: 40),
             
             titleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             titleLabel.topAnchor.constraint(equalTo: logoImageView.bottomAnchor, constant: 35),
@@ -509,6 +585,21 @@ class LoginViewController: UIViewController {
             errorLabel.topAnchor.constraint(equalTo: textField.bottomAnchor, constant: 3),
             errorLabel.leadingAnchor.constraint(equalTo: textField.leadingAnchor)
         ])
+    }
+    @objc private func togglePasswordVisibility() {
+        passwordTextField.isSecureTextEntry.toggle()
+        
+        // Update the eye icon
+        let imageName = passwordTextField.isSecureTextEntry ? "eye.slash" : "eye"
+        if let button = passwordTextField.rightView?.subviews.first as? UIButton {
+            button.setImage(UIImage(systemName: imageName), for: .normal)
+        }
+        
+        // Preserve cursor position
+        if let existingText = passwordTextField.text, passwordTextField.isSecureTextEntry {
+            passwordTextField.deleteBackward()
+            passwordTextField.insertText(existingText)
+        }
     }
 }
 

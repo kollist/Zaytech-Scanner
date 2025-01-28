@@ -1,10 +1,3 @@
-//
-//  Account.swift
-//  Ticket Checker
-//
-//  Created by Zaytech Mac on 4/11/2024.
-//
-
 
 //
 //  Account.swift
@@ -15,6 +8,7 @@
 
 import Foundation
 import Security
+import LocalAuthentication
 
 class KeychainManager {
     private let serviceName = "com.zaytech.keychainmanager"
@@ -38,17 +32,48 @@ class KeychainManager {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
             kSecAttrAccount as String: "user_credentials",
-            kSecValueData as String: credentialsData
+            kSecValueData as String: credentialsData,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly
         ]
         
         SecItemDelete(query as CFDictionary)
-    
+        
         let status = SecItemAdd(query as CFDictionary, nil)
         return status == errSecSuccess
     }
     
-    // Retrieve sensitive data
-    func getCredentials() -> (email: String?, password: String?)? {
+    // Retrieve sensitive data with biometric or device authentication
+    func getCredentialsWithAuthentication(completion: @escaping (Result<(email: String, password: String), ErrorResponse>) -> Void) {
+        
+        // Fetch credentials from Keychain
+        self.getCredentials { result in
+            switch result {
+            case .success(let credentials):
+                let context = LAContext()
+                context.localizedReason = "Authenticate to unlock your stored account details"
+                
+                // Biometric Authentication
+                guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: nil) else {
+                    completion(.failure(ErrorResponse(error: "Biometric authentication not available", statusCode: nil, errorCode: "BIOMETRIC_NOT_AVAILABLE", details: nil)))
+                    return
+                }
+                context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: context.localizedReason) { success, error in
+                    if success {
+                        completion(.success(credentials))
+                    } else if let error = error {
+                        completion(.failure(ErrorResponse(error: error.localizedDescription, statusCode: nil, errorCode: nil, details: nil)))
+                    } else {
+                        completion(.failure(ErrorResponse(error: "Authentication failed", statusCode: nil, errorCode: "AUTH_FAILED", details: nil)))
+                    }
+                }
+            case .failure(let error):
+                completion(.failure(ErrorResponse(error: error.localizedDescription, statusCode: nil, errorCode: nil, details: nil)))
+            }
+        }
+    }
+    
+    // Basic retrieval of credentials (without biometric/authentication)
+    private func getCredentials(completion: @escaping (Result<(email: String, password: String), ErrorResponse>) -> Void) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
@@ -61,18 +86,20 @@ class KeychainManager {
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         
         guard status == errSecSuccess, let credentialsData = result as? Data else {
-            print("Failed to retrieve credentials")
-            return nil
+            completion(.failure(ErrorResponse(error: "Keychain error", statusCode: nil, errorCode: "KEYCHAIN_ERROR", details: nil)))
+            return
         }
         
-        guard let credentials = try? JSONSerialization.jsonObject(with: credentialsData) as? [String: String] else {
-            print("Failed to decode credentials")
-            return nil
+        do {
+            guard let credentials = try JSONSerialization.jsonObject(with: credentialsData) as? [String: String],
+                  let email = credentials["email"],
+                  let password = credentials["password"] else {
+                throw NSError(domain: "Decoding Error", code: -1, userInfo: nil)
+            }
+            completion(.success((email: email, password: password)))
+        } catch {
+            completion(.failure(ErrorResponse(error: error.localizedDescription, statusCode: nil, errorCode: "DECODING_ERROR", details: nil)))
         }
-        
-        let email = credentials["email"]
-        let password = credentials["password"]
-        return (email: email, password: password)
     }
     
     // Clear sensitive data
@@ -87,3 +114,4 @@ class KeychainManager {
         return status == errSecSuccess
     }
 }
+

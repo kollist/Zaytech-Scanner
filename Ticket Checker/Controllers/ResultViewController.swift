@@ -119,7 +119,7 @@ class ResultViewController: UIViewController, UIGestureRecognizerDelegate {
             ScanAgainButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 15),
             ScanAgainButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -15),
             ScanAgainButton.heightAnchor.constraint(equalToConstant: 50),
-            ScanAgainButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -30),
+            ScanAgainButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -15),
         ])
     }
     

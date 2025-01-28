@@ -17,11 +17,12 @@ class AppCoordinator: Coordinator {
     var navigationController: UINavigationController
     var window: UIWindow?
     
-    // Simulated state for example purposes
+    // Private Class Variables
     private var hasChosenLocation: Bool = false
     private var userdefaults = UserDefaultsManager.shared
     private var merchantsmodal = MerchantsModal.shared
     private var profilemodal = ProfileModal.shared
+    private var keychainmanager = KeychainManager.shared
     
     init(navigationController: UINavigationController, window: UIWindow?) {
         self.navigationController = navigationController
@@ -37,7 +38,9 @@ class AppCoordinator: Coordinator {
         splashVC.onSpalshEnding = { [weak self] in
             self?.determineStartingScreen()
         }
-        window?.rootViewController = splashVC
+        var vc = UINavigationController(rootViewController: splashVC)
+        self.navigationController = vc
+        window?.rootViewController = self.navigationController
         window?.makeKeyAndVisible()
     }
     
@@ -46,35 +49,72 @@ class AppCoordinator: Coordinator {
         self.userdefaults.isTokenValid { result in
             switch result {
             case .noToken:
-                self.showLogin()
+                self.showLogin(shouldFetchCredentials: true)
             case .noSlug:
                 self.showLocations(true){}
             case .valid:
                 self.showScanning() {}
             case .invalid:
-                self.showLogin()
+                self.showLogin(shouldFetchCredentials: true)
             }
         }
     }
     
-    private func showLogin() {
-        let loginVC = LoginViewController()
-        loginVC.onLoginSuccess = { [weak self] profile, completion in
-            let merchants = profile.user?.groupMerchants.compactMap { $0 } ?? []
-            if merchants.count == 1, let slug = merchants.first?.slug {
-                self?.userdefaults.saveMerchant(slug: slug)
-                self?.showScanning() {
-                    completion()
-                }
-                completion()
-                return
+    private func showLogin(shouldFetchCredentials: Bool) {
+        if shouldFetchCredentials {
+            fetchCredentialsAndShowLogin()
+        } else {
+            showEmptyLogin()
+        }
+    }
+    
+    private func fetchCredentialsAndShowLogin() {
+        self.keychainmanager.getCredentialsWithAuthentication { [weak self] result in
+            guard let self = self else { return }
+            
+            let loginVC: LoginViewController
+            switch result {
+            case .success(let credentials):
+                loginVC = LoginViewController(
+                    email: credentials.email,
+                    password: credentials.password
+                )
+            case .failure(let error):
+                print(error.safeErrorMessage)
+                loginVC = LoginViewController()
             }
-            self?.showLocations(true){
-                completion()
+            
+            self.configureAndPresent(loginVC: loginVC)
+        }
+    }
+    
+    private func showEmptyLogin() {
+        let loginVC = LoginViewController()
+        configureAndPresent(loginVC: loginVC)
+    }
+    
+    private func configureAndPresent(loginVC: LoginViewController) {
+        // Common configuration
+        loginVC.onLoginSuccess = { [weak self] profile, completion in
+            guard let self = self else { return }
+            
+            let merchants = profile.user?.groupMerchants.compactMap { $0 } ?? []
+            
+            if merchants.count == 1, let slug = merchants.first?.slug {
+                self.userdefaults.saveMerchant(slug: slug)
+                self.showScanning { completion() }
+            } else {
+                self.showLocations(true) { completion() }
             }
         }
-        window?.rootViewController = loginVC
-        window?.makeKeyAndVisible()
+        
+        // Common UI presentation
+        DispatchQueue.main.async {
+            let navController = UINavigationController(rootViewController: loginVC)
+            self.navigationController = navController
+            self.window?.rootViewController = navController
+            self.window?.makeKeyAndVisible()
+        }
     }
     
     private func showLocations(_ isRoot: Bool, _ completion: @escaping () -> Void) {
@@ -114,7 +154,7 @@ class AppCoordinator: Coordinator {
             case .failure(let error):
                 self.showErrorVC(error.safeErrorMessage)
                 if error.isUnauthorized {
-                    self.showLogin()
+                    self.showLogin(shouldFetchCredentials: false)
                 }
             }
             
@@ -131,7 +171,7 @@ class AppCoordinator: Coordinator {
             case .failure(let error):
                 self?.showErrorVC(error.safeErrorMessage)
                 if error.isUnauthorized {
-                    self?.showLogin()
+                    self?.showLogin(shouldFetchCredentials: false)
                 }
                 completion([]) // Pass an empty array in case of failure
             }
@@ -185,7 +225,7 @@ class AppCoordinator: Coordinator {
         // Trigger the completion after everything is set up
         completion()
     }
-
+    
     
     private func showScanningManual(_ scanningVC: QRScannerViewController) {
         let viewControllerToPresent = CheckManuallViewController()
@@ -213,7 +253,7 @@ class AppCoordinator: Coordinator {
         } else {
             resultVC.notFound = true
         }
-
+        
         resultVC.onBackToScan = { [weak self] in
             self?.navigationController.popToRootViewController(animated: true)
         }
@@ -273,12 +313,12 @@ class AppCoordinator: Coordinator {
         userdefaults.clearToken()
         userdefaults.clearMerchant()
         hasChosenLocation = false
-        showLogin()
+        self.showLogin(shouldFetchCredentials: false)
     }
     private func handleProfileFetchError(_ error: ErrorResponse) {
         showErrorVC(error.safeErrorMessage)
         if error.isUnauthorized {
-            showLogin()
+            self.showLogin(shouldFetchCredentials: false)
         }
     }
 }
